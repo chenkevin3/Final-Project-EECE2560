@@ -1,142 +1,142 @@
 #include <iostream>
+#include <vector>
+#include <string>
+#include <chrono>  // For performance measurement
+#include <cstdlib> // For random number generation
+
 using namespace std;
 
-// Define a Node structure to represent each seat
-struct Node {
-    int seatNumber;
-    Node* next;
+struct Player {
+    string name;
+    int id;
+    int score;
+    
+    Player(string playerName, int playerId, int playerScore)
+        : name(playerName), id(playerId), score(playerScore) {}
 };
 
-// Class for the ticket booking system
-class TicketBookingSystem {
-private:
-    Node* head; // Head of the singly linked list
+// Swap function for sorting
+void swap(Player &a, Player &b) {
+    Player temp = a;
+    a = b;
+    b = temp;
+}
 
-public:
-    // Constructor
-    TicketBookingSystem() {
-        head = nullptr; // Initialize the head to nullptr, indicating an empty list
-    }
-
-    // Function to book a seat (add a node to the end of the list)
-    void bookSeat(int seatNumber) {
-        Node* newNode = new Node();
-        newNode->seatNumber = seatNumber;
-        newNode->next = nullptr;
-
-        // If the list is empty, the new node becomes the head
-        if (head == nullptr) {
-            head = newNode;
-        } else {
-            // Otherwise, find the end of the list and add the new node there
-            Node* current = head;
-            while (current->next != nullptr) {
-                current = current->next;
-            }
-            current->next = newNode;
-        }
-        cout << "Seat " << seatNumber << " has been booked." << endl;
-    }
-
-    // Function to cancel a seat (remove a node from the list)
-    void cancelSeat(int seatNumber) {
-        // If the list is empty, there's nothing to cancel
-        if (head == nullptr) {
-            cout << "No seats are booked yet." << endl;
-            return;
-        }
-
-        // If the seat to be canceled is the head of the list
-        if (head->seatNumber == seatNumber) {
-            Node* temp = head;
-            head = head->next;
-            delete temp;
-            cout << "Seat " << seatNumber << " has been canceled." << endl;
-            return;
-        }
-
-        // Traverse the list to find the seat to cancel
-        Node* current = head;
-        Node* previous = nullptr;
-        while (current != nullptr && current->seatNumber != seatNumber) {
-            previous = current;
-            current = current->next;
-        }
-
-        // If we find the seat, remove it
-        if (current != nullptr) {
-            previous->next = current->next;
-            delete current;
-            cout << "Seat " << seatNumber << " has been canceled." << endl;
-        } else {
-            // If the seat is not found
-            cout << "Seat " << seatNumber << " is not booked." << endl;
+// Partition function for Quick Sort
+int partition(vector<Player> &players, int low, int high) {
+    int pivot = players[high].score;
+    int i = low - 1;
+    
+    for (int j = low; j < high; j++) {
+        if (players[j].score > pivot) { // Sort in descending order
+            i++;
+            swap(players[i], players[j]);
         }
     }
+    swap(players[i + 1], players[high]);
+    return i + 1;
+}
 
-    // Function to display all booked seats
-    void showAvailableSeats() {
-        if (head == nullptr) {
-            cout << "No seats are booked yet." << endl;
-            return;
-        }
-
-        cout << "Available Seats: ";
-        Node* current = head;
-        while (current != nullptr) {
-            cout << "Seat " << current->seatNumber;
-            if (current->next != nullptr) {
-                cout << " -> ";
-            }
-            current = current->next;
-        }
-        cout << " -> NULL" << endl;
+// Quick Sort function to rank players by score
+void quickSort(vector<Player> &players, int low, int high) {
+    if (low < high) {
+        int pi = partition(players, low, high);
+        
+        quickSort(players, low, pi - 1);
+        quickSort(players, pi + 1, high);
     }
+}
 
-    // Destructor to free memory when the program ends
-    ~TicketBookingSystem() {
-        Node* current = head;
-        while (current != nullptr) {
-            Node* temp = current;
-            current = current->next;
-            delete temp;
+// Function to update match results
+void updateMatch(vector<Player>& players, int player1Index, int player2Index, int points) {
+    players[player1Index].score += points;  // Player 1 gains points
+    players[player2Index].score -= points;  // Player 2 loses points
+    
+    // Re-sort players by score to update rankings
+    quickSort(players, 0, players.size() - 1);
+}
+
+// Generate random test data for validation
+vector<Player> generateRandomPlayers(int count) {
+    vector<Player> players;
+    for (int i = 0; i < count; ++i) {
+        string name = "Player" + to_string(i + 1);
+        int score = rand() % 500;  // Random score between 0 and 500
+        players.push_back(Player(name, i, score));
+    }
+    return players;
+}
+
+// Test the sorting algorithm and update mechanism
+void runTests() {
+    cout << "\n--- Running Tests ---\n";
+    
+    // Generate test data
+    vector<Player> players = generateRandomPlayers(10); // Example with 10 players
+    
+    cout << "\nInitial Rankings:\n";
+    for (const auto &player : players) {
+        cout << player.name << " - " << player.score << "\n";
+    }
+    
+    // Measure sorting time
+    auto start = chrono::high_resolution_clock::now();
+    quickSort(players, 0, players.size() - 1);
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double> sortDuration = end - start;
+    
+    cout << "\nSorted Rankings:\n";
+    for (const auto &player : players) {
+        cout << player.name << " - " << player.score << "\n";
+    }
+    cout << "Sorting time: " << sortDuration.count() << " seconds\n";
+    
+    // Update and re-sort after a match
+    cout << "\nSimulating match (Player1 vs Player2, 20 points to Player1)...\n";
+    updateMatch(players, 0, 1, 20);  // Player1 wins against Player2
+
+    cout << "\nUpdated Rankings:\n";
+    for (const auto &player : players) {
+        cout << player.name << " - " << player.score << "\n";
+    }
+    
+    // Check if rankings are maintained
+    bool sorted = true;
+    for (size_t i = 1; i < players.size(); ++i) {
+        if (players[i-1].score < players[i].score) {
+            sorted = false;
+            break;
         }
     }
-};
+    cout << "\nRanking validation: " << (sorted ? "Passed" : "Failed") << "\n";
+}
 
-// Main function to run the ticket booking system
 int main() {
-    TicketBookingSystem system;
-    int choice, seatNumber;
+    // Sample players
+    vector<Player> players = {
+        Player("Alice", 1, 100),
+        Player("Bob", 2, 150),
+        Player("Charlie", 3, 120),
+    };
 
-    while (true) {
-        cout << "\nEvent Ticket Booking System\n";
-        cout << "1. Book a Seat\n";
-        cout << "2. Cancel a Seat\n";
-        cout << "3. Show Available Seats\n";
-        cout << "4. Exit\n";
-        cout << "Choose an option (1-4): ";
-        cin >> choice;
-
-        switch (choice) {
-            case 1:
-                cout << "Enter seat number to book: ";
-                cin >> seatNumber;
-                system.bookSeat(seatNumber);
-                break;
-            case 2:
-                cout << "Enter seat number to cancel: ";
-                cin >> seatNumber;
-                system.cancelSeat(seatNumber);
-                break;
-            case 3:
-                system.showAvailableSeats();
-                break;
-            case 4:
-                cout << "Exiting the system. Goodbye!" << endl;
-                return 0;
-            default:
-                cout << "Invalid option. Please choose a number between 1 and 4." << endl;
-        }
+    // Display initial rankings
+    cout << "Initial Rankings:\n";
+    for (const auto &player : players) {
+        cout << player.name << " - " << player.score << "\n";
     }
+
+    // Update matches and see real-time ranking changes
+    cout << "\nMatch Update:\n";
+    updateMatch(players, 0, 1, 20); // Example: Alice wins against Bob, gaining 20 points
+
+    // Display updated rankings
+    cout << "\nUpdated Rankings:\n";
+    for (const auto &player : players) {
+        cout << player.name << " - " << player.score << "\n";
+    }
+
+    // Run tests on sorting and ranking functionality
+    runTests();
+
+    return 0;
 }
