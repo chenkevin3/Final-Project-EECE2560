@@ -2,327 +2,323 @@
 #include <vector>
 #include <string>
 #include <fstream>
-#include <iomanip>
+#include <iomanip> // For fixed and setprecision
+#include <algorithm> // For sorting
+#include <sstream> // For stringstream
 
-// Namespace declaration
 using namespace std;
 
-// Player struct to store player details
+
+// Constants
+const string filename = "players_data.csv";
+
 struct Player {
     string name;
     int id;
-    int score;
-    
-    Player(string playerName, int playerId, int playerScore)
-        : name(playerName), id(playerId), score(playerScore) {}
+    int matchesPlayed;
+    int matchesWon;
+    double winRate;
+    int kills, deaths, assists;
+    double kda;
+    int rankedScore;
+
+    Player(string playerName, int playerId, int matches, int wins, int playerKills = 0, int playerDeaths = 0, int playerAssists = 0, int rankScore = 0)
+        : name(playerName), id(playerId), matchesPlayed(matches), matchesWon(wins),
+          kills(playerKills), deaths(playerDeaths), assists(playerAssists), rankedScore(rankScore) {
+        winRate = (matches > 0) ? (static_cast<double>(wins) / matches) * 100 : 0.0;
+        kda = (deaths > 0) ? static_cast<double>(kills + assists) / deaths : kills + assists;
+    }
+
+    double averageKda() const {
+        return matchesPlayed > 0 ? kda / matchesPlayed : 0.0;
+    }
 };
 
-// Merge function for Merge Sort
-void merge(vector<Player> &players, int left, int mid, int right) {
-    int n1 = mid - left + 1;
-    int n2 = right - mid;
 
-    vector<Player> leftArray(n1);
-    vector<Player> rightArray(n2);
 
-    for (int i = 0; i < n1; i++)
-        leftArray[i] = players[left + i];
-    for (int i = 0; i < n2; i++)
-        rightArray[i] = players[mid + 1 + i];
 
-    int i = 0, j = 0, k = left;
-    while (i < n1 && j < n2) {
-        if (leftArray[i].score >= rightArray[j].score) {
-            players[k] = leftArray[i];
-            i++;
-        } else {
-            players[k] = rightArray[j];
-            j++;
-        }
-        k++;
-    }
-
-    while (i < n1) {
-        players[k] = leftArray[i];
-        i++;
-        k++;
-    }
-
-    while (j < n2) {
-        players[k] = rightArray[j];
-        j++;
-        k++;
-    }
-}
-
-// Merge Sort function to rank players
-void mergeSort(vector<Player> &players, int left, int right) {
-    if (left < right) {
-        int mid = left + (right - left) / 2;
-        mergeSort(players, left, mid);
-        mergeSort(players, mid + 1, right);
-        merge(players, left, mid, right);
-    }
-}
-
-// Advanced ranking logic in match update
-void updateMatch(vector<Player> &players, int player1Index, int player2Index, int points) {
-    int difficultyFactor = players[player2Index].score / 100;
-    players[player1Index].score += points * difficultyFactor;
-
-    mergeSort(players, 0, players.size() - 1);
-}
-
-// Save player data to file for persistence
-void saveDataToFile(const vector<Player> &players, const string &filename) {
+// Save player data to file
+void saveDataToFile(const vector<Player>& players, const string& filename) {
     ofstream file(filename);
     if (file.is_open()) {
-        for (const auto &player : players) {
-            file << player.name << " " << player.id << " " << player.score << "\n";
+        for (const auto& player : players) {
+            file << player.name << "," << player.id << "," << player.matchesPlayed << "," << player.matchesWon << "," << fixed << setprecision(2) << player.winRate << "\n";
         }
         file.close();
     }
 }
 
-// Load player data from file
-void loadDataFromFile(vector<Player> &players, const string &filename) {
+void loadDataFromFile(vector<Player>& players, const string& filename) {
     ifstream file(filename);
     if (file.is_open()) {
-        string name;
-        int id, score;
-        players.clear(); // Clear existing players before loading new data
-        while (file >> name >> id >> score) {
-            players.emplace_back(name, id, score);
+        string line;
+        players.clear();
+        while (getline(file, line)) {
+            stringstream ss(line);
+            string name;
+            int id, matchesPlayed, matchesWon;
+            double winRate;
+            char delimiter;
+
+            // Parse line
+            getline(ss, name, ',');
+            ss >> id >> delimiter >> matchesPlayed >> delimiter >> matchesWon >> delimiter >> winRate;
+
+            // Create player and add to list
+            players.push_back(Player(name, id, matchesPlayed, matchesWon));
         }
         file.close();
     }
 }
 
-// Command-line interface function
+
+// Display menu
 void displayMenu() {
     cout << "\nTournament Ranking System\n";
-    cout << "1. View Rankings\n";
+    cout << "1. View Rankings (By Win Rate)\n";
     cout << "2. Add Player\n";
-    cout << "3. Run Match Update\n";
+    cout << "3. Record Match Result\n";
     cout << "4. Save Rankings\n";
     cout << "5. Load Rankings\n";
     cout << "6. Exit\n";
     cout << "Choose an option: ";
 }
 
-int main() {
-    vector<Player> players = {
-        Player("Alice", 1, 100),
-        Player("Bob", 2, 150),
-        Player("Charlie", 3, 120)
-    };
+// Forward declarations of comparator functions
+bool compareByWinRate(const Player& a, const Player& b);
+bool compareByRankedScore(const Player& a, const Player& b);
+bool compareByAverageKDA(const Player& a, const Player& b);
 
-    loadDataFromFile(players, "players.txt"); // Load data at program start
+// Function to update match results
+void updateMatch(vector<Player> &players, int player1Index, int player2Index, bool p1Won, bool p2Won,
+                 int p1Kills, int p1Deaths, int p1Assists, int p1RankChange,
+                 int p2Kills, int p2Deaths, int p2Assists, int p2RankChange) {
+    // Update stats for Player 1
+    players[player1Index].matchesPlayed++;
+    players[player1Index].kills += p1Kills;
+    players[player1Index].deaths += p1Deaths;
+    players[player1Index].assists += p1Assists;
+    players[player1Index].rankedScore += p1RankChange;
+    players[player1Index].kda = (players[player1Index].deaths > 0)
+        ? static_cast<double>(players[player1Index].kills + players[player1Index].assists) / players[player1Index].deaths
+        : players[player1Index].kills + players[player1Index].assists;
+
+    if (p1Won) players[player1Index].matchesWon++;
+
+    // Update stats for Player 2
+    players[player2Index].matchesPlayed++;
+    players[player2Index].kills += p2Kills;
+    players[player2Index].deaths += p2Deaths;
+    players[player2Index].assists += p2Assists;
+    players[player2Index].rankedScore += p2RankChange;
+    players[player2Index].kda = (players[player2Index].deaths > 0)
+        ? static_cast<double>(players[player2Index].kills + players[player2Index].assists) / players[player2Index].deaths
+        : players[player2Index].kills + players[player2Index].assists;
+
+    if (p2Won) players[player2Index].matchesWon++;
+
+    // Recalculate win rates
+    players[player1Index].winRate = (players[player1Index].matchesPlayed > 0)
+        ? static_cast<double>(players[player1Index].matchesWon) / players[player1Index].matchesPlayed * 100
+        : 0.0;
+
+    players[player2Index].winRate = (players[player2Index].matchesPlayed > 0)
+        ? static_cast<double>(players[player2Index].matchesWon) / players[player2Index].matchesPlayed * 100
+        : 0.0;
+
+    // Sort players by win rate after the update
+    sort(players.begin(), players.end(), compareByWinRate);
+}
+
+
+void displayPlayers(const vector<Player>& players) {
+    cout << left << setw(5) << "ID" 
+         << setw(15) << "Name" 
+         << setw(10) << "Matches" 
+         << setw(10) << "Wins" 
+         << setw(12) << "WinRate(%)" 
+         << setw(8) << "Kills" 
+         << setw(8) << "Deaths" 
+         << setw(8) << "Assists" 
+         << setw(8) << "KDA" 
+         << setw(10) << "AvgKDA" 
+         << setw(12) << "RankedScore" 
+         << endl;
+
+    cout << string(100, '-') << endl; // Add a separator line for clarity
+
+    for (const auto& player : players) {
+        cout << left << setw(5) << player.id 
+             << setw(15) << player.name 
+             << setw(10) << player.matchesPlayed 
+             << setw(10) << player.matchesWon 
+             << setw(12) << fixed << setprecision(2) << player.winRate 
+             << setw(8) << player.kills 
+             << setw(8) << player.deaths 
+             << setw(8) << player.assists 
+             << setw(8) << fixed << setprecision(2) << player.kda 
+             << setw(10) << fixed << setprecision(2) << player.averageKda() 
+             << setw(12) << player.rankedScore 
+             << endl;
+    }
+}
+
+
+bool compareByWinRate(const Player& a, const Player& b) {
+    return a.winRate > b.winRate;
+}
+
+bool compareByRankedScore(const Player& a, const Player& b) {
+    return a.rankedScore > b.rankedScore;
+}
+
+bool compareByAverageKDA(const Player& a, const Player& b) {
+    return a.averageKda() > b.averageKda();
+}
+
+// Replace lambdas with these named functions
+void sortPlayers(vector<Player>& players) {
+    int choice;
+    cout << "Choose a sorting criterion:\n"
+         << "1. Win Rate\n"
+         << "2. Ranked Score\n"
+         << "3. Average KDA\n";
+    cin >> choice;
+
+    switch (choice) {
+        case 1:
+            sort(players.begin(), players.end(), compareByWinRate);
+            break;
+        case 2:
+            sort(players.begin(), players.end(), compareByRankedScore);
+            break;
+        case 3:
+            sort(players.begin(), players.end(), compareByAverageKDA);
+            break;
+        default:
+            cout << "Invalid choice. Sorting by default (Win Rate).\n";
+            sort(players.begin(), players.end(), compareByWinRate);
+    }
+}
+
+
+// Find player by ID
+int findPlayerIndex(const vector<Player>& players, int playerId) {
+    for (int i = 0; i < players.size(); ++i) {
+        if (players[i].id == playerId)
+            return i;
+    }
+    return -1;
+}
+
+int main() {
+    vector<Player> players;
+    players.push_back(Player("Alice", 1, 10, 7, 50, 10, 15, 1000));
+    players.push_back(Player("Bob", 2, 15, 10, 60, 5, 10, 900));
+    players.push_back(Player("Charlie", 3, 12, 8, 40, 12, 20, 800));
+    players.push_back(Player("Dave", 4, 8, 4, 20, 8, 12, 700));
+
+
+    cout << "Initial Player List:\n";
+    displayPlayers(players);
+
+    sortPlayers(players);
+
+    cout << "\nSorted Player List:\n";
+    displayPlayers(players);
+
     int choice;
 
+    // Start the main menu loop
     while (true) {
         displayMenu();
         cin >> choice;
 
+        if (cin.fail()) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Invalid input. Please try again.\n";
+            continue;
+        }
         switch (choice) {
-            case 1:
-                cout << "\nCurrent Rankings:\n";
-                for (const auto &player : players) {
-                    cout << player.name << " - " << player.score << "\n";
+            case 1: {
+                sort(players.begin(), players.end(), compareByWinRate);
+                cout << "\nCurrent Rankings (By Win Rate):\n";
+                cout << "Name\tID\tMatches Played\tMatches Won\tWin Rate (%)\n";
+                for (const auto& player : players) {
+                    cout << player.name << "\t" << player.id << "\t" << player.matchesPlayed
+                         << "\t\t" << player.matchesWon << "\t\t" << fixed << setprecision(2) << player.winRate << "\n";
                 }
-                break;
-
-            case 2: {
-                string name;
-                int id, score;
-                cout << "Enter player name: ";
-                cin >> name;
-                cout << "Enter player ID: ";
-                cin >> id;
-                cout << "Enter player score: ";
-                cin >> score;
-                players.emplace_back(name, id, score);
-                mergeSort(players, 0, players.size() - 1);
-                cout << "Player added and rankings updated.\n";
                 break;
             }
 
-            case 3: {
-                int p1, p2, points;
-                cout << "Enter index of player 1: ";
-                cin >> p1;
-                cout << "Enter index of player 2: ";
-                cin >> p2;
-                cout << "Enter points for the match: ";
-                cin >> points;
-                if (p1 < players.size() && p2 < players.size()) {
-                    updateMatch(players, p1, p2, points);
-                    cout << "Match updated and rankings adjusted.\n";
-                } else {
-                    cout << "Invalid player indices.\n";
+            case 2: {
+                string name;
+                int id;
+
+                cout << "Enter player name: ";
+                cin.ignore();  // Clear the input buffer to ensure proper input
+                getline(cin, name);  // Use getline to allow names with spaces
+
+                cout << "Enter player ID: ";
+                cin >> id;
+
+                // Check for duplicate ID
+                if (findPlayerIndex(players, id) != -1) {
+                    cout << "Error: Player ID already exists. Try again.\n";
+                    break;
                 }
+
+                players.push_back(Player(name, id, 0, 0));
+                cout << "Player added.\n";
+                break;
+            }
+
+
+            case 3: {
+                int p1, p2, p1Kills, p1Deaths, p1Assists, p2Kills, p2Deaths, p2Assists, p1RankChange, p2RankChange;
+                char result;
+            
+                cout << "Enter index of Player 1: ";
+                cin >> p1;
+                cout << "Enter index of Player 2: ";
+                cin >> p2;
+            
+                cout << "Did Player 1 win? (y/n): ";
+                cin >> result;
+                bool p1Won = (result == 'y');
+                bool p2Won = !p1Won;
+            
+                cout << "Enter Player 1 Kills, Deaths, Assists, and Rank Change: ";
+                cin >> p1Kills >> p1Deaths >> p1Assists >> p1RankChange;
+            
+                cout << "Enter Player 2 Kills, Deaths, Assists, and Rank Change: ";
+                cin >> p2Kills >> p2Deaths >> p2Assists >> p2RankChange;
+            
+                updateMatch(players, p1, p2, p1Won, p2Won, p1Kills, p1Deaths, p1Assists, p1RankChange,
+                            p2Kills, p2Deaths, p2Assists, p2RankChange);
+            
+                cout << "Match updated and rankings adjusted.\n";
                 break;
             }
 
             case 4:
-                saveDataToFile(players, "players.txt");
+                saveDataToFile(players, filename);
                 cout << "Rankings saved to file.\n";
                 break;
 
             case 5:
-                loadDataFromFile(players, "players.txt");
+                loadDataFromFile(players, filename);
                 cout << "Rankings loaded from file.\n";
                 break;
 
             case 6:
                 cout << "Exiting...\n";
-                saveDataToFile(players, "players.txt"); // Auto-save before exit
+                saveDataToFile(players, filename); // Auto-save before exit
                 return 0;
 
             default:
                 cout << "Invalid option. Please try again.\n";
         }
     }
-}
-#include <iostream>
-#include <vector>
-#include <string>
-#include <chrono>  // For performance measurement
-#include <cstdlib> // For random number generation
-
-using namespace std;
-
-struct Player {
-    string name;
-    int id;
-    int score;
-    
-    Player(string playerName, int playerId, int playerScore)
-        : name(playerName), id(playerId), score(playerScore) {}
-};
-
-// Swap function for sorting
-void swap(Player &a, Player &b) {
-    Player temp = a;
-    a = b;
-    b = temp;
-}
-
-// Partition function for Quick Sort
-int partition(vector<Player> &players, int low, int high) {
-    int pivot = players[high].score;
-    int i = low - 1;
-    
-    for (int j = low; j < high; j++) {
-        if (players[j].score > pivot) { // Sort in descending order
-            i++;
-            swap(players[i], players[j]);
-        }
-    }
-    swap(players[i + 1], players[high]);
-    return i + 1;
-}
-
-// Quick Sort function to rank players by score
-void quickSort(vector<Player> &players, int low, int high) {
-    if (low < high) {
-        int pi = partition(players, low, high);
-        
-        quickSort(players, low, pi - 1);
-        quickSort(players, pi + 1, high);
-    }
-}
-
-// Function to update match results
-void updateMatch(vector<Player>& players, int player1Index, int player2Index, int points) {
-    players[player1Index].score += points;  // Player 1 gains points
-    players[player2Index].score -= points;  // Player 2 loses points
-    
-    // Re-sort players by score to update rankings
-    quickSort(players, 0, players.size() - 1);
-}
-
-// Generate random test data for validation
-vector<Player> generateRandomPlayers(int count) {
-    vector<Player> players;
-    for (int i = 0; i < count; ++i) {
-        string name = "Player" + to_string(i + 1);
-        int score = rand() % 500;  // Random score between 0 and 500
-        players.push_back(Player(name, i, score));
-    }
-    return players;
-}
-
-// Test the sorting algorithm and update mechanism
-void runTests() {
-    cout << "\n--- Running Tests ---\n";
-    
-    // Generate test data
-    vector<Player> players = generateRandomPlayers(10); // Example with 10 players
-    
-    cout << "\nInitial Rankings:\n";
-    for (const auto &player : players) {
-        cout << player.name << " - " << player.score << "\n";
-    }
-    
-    // Measure sorting time
-    auto start = chrono::high_resolution_clock::now();
-    quickSort(players, 0, players.size() - 1);
-    auto end = chrono::high_resolution_clock::now();
-    chrono::duration<double> sortDuration = end - start;
-    
-    cout << "\nSorted Rankings:\n";
-    for (const auto &player : players) {
-        cout << player.name << " - " << player.score << "\n";
-    }
-    cout << "Sorting time: " << sortDuration.count() << " seconds\n";
-    
-    // Update and re-sort after a match
-    cout << "\nSimulating match (Player1 vs Player2, 20 points to Player1)...\n";
-    updateMatch(players, 0, 1, 20);  // Player1 wins against Player2
-
-    cout << "\nUpdated Rankings:\n";
-    for (const auto &player : players) {
-        cout << player.name << " - " << player.score << "\n";
-    }
-    
-    // Check if rankings are maintained
-    bool sorted = true;
-    for (size_t i = 1; i < players.size(); ++i) {
-        if (players[i-1].score < players[i].score) {
-            sorted = false;
-            break;
-        }
-    }
-    cout << "\nRanking validation: " << (sorted ? "Passed" : "Failed") << "\n";
-}
-
-int main() {
-    // Sample players
-    vector<Player> players = {
-        Player("Alice", 1, 100),
-        Player("Bob", 2, 150),
-        Player("Charlie", 3, 120),
-    };
-
-    // Display initial rankings
-    cout << "Initial Rankings:\n";
-    for (const auto &player : players) {
-        cout << player.name << " - " << player.score << "\n";
-    }
-
-    // Update matches and see real-time ranking changes
-    cout << "\nMatch Update:\n";
-    updateMatch(players, 0, 1, 20); // Example: Alice wins against Bob, gaining 20 points
-
-    // Display updated rankings
-    cout << "\nUpdated Rankings:\n";
-    for (const auto &player : players) {
-        cout << player.name << " - " << player.score << "\n";
-    }
-
-    // Run tests on sorting and ranking functionality
-    runTests();
-
-    return 0;
 }
